@@ -1,0 +1,7 @@
+name: bot-toolkit
+channels:
+  - conda-forge
+dependencies:
+  - nodejs=22
+  - ffmpeg          # 影片合成
+  # npm 套件由 package.json / package-lock.json 管理：conda activate bot-toolkit && npm ci

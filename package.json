@@ -1,0 +1,27 @@
+{
+  "name": "bot-toolkit",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "社群內容機器人的共用模組：圖卡、LLM 潤稿防呆、配音、短影音、素材、發文",
+  "exports": {
+    "./env": "./src/env.mjs",
+    "./post": "./src/post/index.mjs",
+    "./cards": "./src/cards/index.mjs",
+    "./llm": "./src/llm/index.mjs",
+    "./tts": "./src/tts/index.mjs",
+    "./broll": "./src/broll/index.mjs",
+    "./video": "./src/video/index.mjs",
+    "./publish/threads": "./src/publish/threads.mjs",
+    "./data/twse": "./src/data/twse.mjs"
+  },
+  "bin": {
+    "bot-toolkit": "./src/cli.mjs"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.131.0",
+    "@resvg/resvg-js": "^2.6.2",
+    "msedge-tts": "^2.0.9",
+    "satori": "^0.35.1"
+  }
+}

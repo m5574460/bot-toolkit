@@ -1,0 +1,14 @@
+# GPU 模式＋前處理多執行緒＋參考錄音快取（原始碼把 torch / onnxruntime 寫死成 1 個執行緒，且每句都重算參考錄音特徵）
+# 換聲音：把錄音放進 ./voices/，設定 SPEAKER_PROMPT_AUDIO_PATH 與 SPEAKER_PROMPT_TEXT_TRANSCRIPTION（逐字稿）
+services:
+  app:
+    environment:
+      - TORCH_THREADS=8
+      - ORT_THREADS=8
+      - SPEAKER_PROMPT_AUDIO_PATH=${SPEAKER_PROMPT_AUDIO_PATH:-./data/example.wav}
+      - SPEAKER_PROMPT_TEXT_TRANSCRIPTION=${SPEAKER_PROMPT_TEXT_TRANSCRIPTION:-在密碼學中，加密是將明文資訊改變為難以讀取的密文內容，使之不可讀的方法。只有擁有解密方法的對象，經由解密過程，才能將密文還原為正常可讀的內容。}
+    volumes:
+      - ./api.py:/breezyvoice/api.py:ro
+      - ./single_inference.py:/breezyvoice/single_inference.py:ro
+      - ./cosyvoice/cli/frontend.py:/breezyvoice/cosyvoice/cli/frontend.py:ro
+      - ./voices:/breezyvoice/voices:ro

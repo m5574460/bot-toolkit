@@ -1,0 +1,9 @@
+# 不使用 GPU（Docker Desktop 26 + 新版驅動在 WSL 下 CUDA 初始化失敗），改用多執行緒 CPU
+services:
+  app:
+    environment:
+      - CUDA_VISIBLE_DEVICES=
+      - TORCH_THREADS=16
+    volumes:
+      - ./single_inference.py:/breezyvoice/single_inference.py:ro
+    deploy: !reset {}

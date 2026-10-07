@@ -1,0 +1,90 @@
+diff --git a/Dockerfile b/Dockerfile
+index 6b6ba69..2295ccd 100644
+--- a/Dockerfile
++++ b/Dockerfile
+@@ -15,7 +15,13 @@ RUN apt-get update && \
+ COPY requirements.txt /breezyvoice/requirements.txt
+ 
+ RUN --mount=type=cache,target=/root/.cache/uv \
+-    uv pip install -r requirements.txt --index-strategy unsafe-best-match
++    echo "setuptools<70" > /tmp/build-constraints.txt && \
++    printf "transformers>=4.40,<4.46\nruamel.yaml<0.18\n" > /tmp/constraints.txt && \
++    uv pip install -r requirements.txt --index-strategy unsafe-best-match \
++      --build-constraint /tmp/build-constraints.txt --constraint /tmp/constraints.txt && \
++    uv pip install "setuptools<70" && \
++    uv pip uninstall onnxruntime onnxruntime-gpu && \
++    uv pip install "onnxruntime==1.16.3"
+ 
+ COPY . .
+ 
+diff --git a/api.py b/api.py
+index ef0561e..e6e29cb 100644
+--- a/api.py
++++ b/api.py
+@@ -85,9 +85,13 @@ async def speach_endpoint(request: Request, payload: SpeechRequest):
+     content_to_synthesize = request.app.state.cosyvoice.frontend.text_normalize_new(
+         payload.input, split=False
+     )
+-    speaker_prompt_text_transcription_bopomo = get_bopomofo_rare(
+-        speaker_prompt_text_transcription, request.app.state.bopomofo_converter
+-    )
++    # 參考錄音的逐字稿固定不變，注音轉換只做一次
++    cache = request.app.state._state.setdefault("prompt_bopomo", {})
++    if speaker_prompt_text_transcription not in cache:
++        cache[speaker_prompt_text_transcription] = get_bopomofo_rare(
++            speaker_prompt_text_transcription, request.app.state.bopomofo_converter
++        )
++    speaker_prompt_text_transcription_bopomo = cache[speaker_prompt_text_transcription]
+ 
+     content_to_synthesize_bopomo = get_bopomofo_rare(
+         content_to_synthesize, request.app.state.bopomofo_converter
+diff --git a/cosyvoice/cli/frontend.py b/cosyvoice/cli/frontend.py
+index 118d19d..7e306c8 100755
+--- a/cosyvoice/cli/frontend.py
++++ b/cosyvoice/cli/frontend.py
+@@ -49,7 +49,7 @@ class CosyVoiceFrontEnd:
+         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+         option = onnxruntime.SessionOptions()
+         option.graph_optimization_level = onnxruntime.GraphOptimizationLevel.ORT_ENABLE_ALL
+-        option.intra_op_num_threads = 1
++        option.intra_op_num_threads = int(os.environ.get("ORT_THREADS", "1"))
+         self.campplus_session = onnxruntime.InferenceSession(campplus_model, sess_options=option, providers=["CPUExecutionProvider"])
+         self.speech_tokenizer_session = onnxruntime.InferenceSession(speech_tokenizer_model, sess_options=option, providers=["CUDAExecutionProvider"if torch.cuda.is_available() else "CPUExecutionProvider"])
+         if os.path.exists(spk2info):
+@@ -137,11 +137,18 @@ class CosyVoiceFrontEnd:
+ 
+     def frontend_zero_shot(self, tts_text, prompt_text, prompt_speech_16k):
+         tts_text_token, tts_text_token_len = self._extract_text_token(tts_text)
+-        prompt_text_token, prompt_text_token_len = self._extract_text_token(prompt_text)
+-        prompt_speech_22050 = torchaudio.transforms.Resample(orig_freq=16000, new_freq=22050)(prompt_speech_16k)
+-        speech_feat, speech_feat_len = self._extract_speech_feat(prompt_speech_22050)
+-        speech_token, speech_token_len = self._extract_speech_token(prompt_speech_16k)
+-        embedding = self._extract_spk_embedding(prompt_speech_16k)
++        # 參考錄音每次請求都一樣：特徵只算一次（原本每句都重算，佔掉一半以上的時間）
++        key = (prompt_text, id(prompt_speech_16k), tuple(prompt_speech_16k.shape))
++        cache = self.__dict__.setdefault('_prompt_cache', {})
++        if key not in cache:
++            prompt_text_token, prompt_text_token_len = self._extract_text_token(prompt_text)
++            prompt_speech_22050 = torchaudio.transforms.Resample(orig_freq=16000, new_freq=22050)(prompt_speech_16k)
++            speech_feat, speech_feat_len = self._extract_speech_feat(prompt_speech_22050)
++            speech_token, speech_token_len = self._extract_speech_token(prompt_speech_16k)
++            embedding = self._extract_spk_embedding(prompt_speech_16k)
++            cache[key] = (prompt_text_token, prompt_text_token_len, speech_feat, speech_feat_len, speech_token, speech_token_len, embedding)
++        (prompt_text_token, prompt_text_token_len, speech_feat, speech_feat_len,
++         speech_token, speech_token_len, embedding) = cache[key]
+         model_input = {'text': tts_text_token, 'text_len': tts_text_token_len,
+                        'prompt_text': prompt_text_token, 'prompt_text_len': prompt_text_token_len,
+                        'llm_prompt_speech_token': speech_token, 'llm_prompt_speech_token_len': speech_token_len,
+diff --git a/single_inference.py b/single_inference.py
+index 7e99a2d..6887634 100755
+--- a/single_inference.py
++++ b/single_inference.py
+@@ -6,7 +6,7 @@ from functools import partial
+ import time
+ 
+ import torch
+-torch.set_num_threads(1)
++torch.set_num_threads(int(os.environ.get("TORCH_THREADS", "1")))
+ import torchaudio
+ import torchaudio.functional as F
+ import whisper
