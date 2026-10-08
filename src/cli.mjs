@@ -6,6 +6,7 @@
 //   bot-toolkit threads <貼文資料夾> [--images] [--template] [--confirm]   發 Threads（預設只預覽；--template 用模板原稿）
 //   bot-toolkit threads --text "內容" [--confirm]
 //   bot-toolkit whoami                                  驗證 Threads 權杖
+//   bot-toolkit threads-refresh                         Threads 權杖續期（寫回 .env；產生滿 24 小時才能續）
 // 其他語言（例如 Python）也可以用 subprocess 呼叫這些指令，透過 post.json 交換資料。
 import { readdir, readFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
@@ -61,6 +62,11 @@ switch (cmd) {
   case 'whoami': {
     const { whoami } = await import('./publish/threads.mjs');
     console.log(await whoami());
+    break;
+  }
+  case 'threads-refresh': {
+    const { refreshToken } = await import('./publish/threads.mjs');
+    console.log(`Threads 權杖已續期，新到期日：${await refreshToken()}`);
     break;
   }
   case 'threads': {

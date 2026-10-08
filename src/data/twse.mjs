@@ -15,7 +15,8 @@ export function rocToIso(s) {
 async function getJson(url) {
   for (let i = 0; i < 3; i++) {
     try {
-      const res = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0' } });
+      // 證交所偶爾很慢：每次最多等 60 秒，失敗重試
+      const res = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0' }, signal: AbortSignal.timeout(60_000) });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       return await res.json();
     } catch (err) {
