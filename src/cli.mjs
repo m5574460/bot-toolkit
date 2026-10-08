@@ -3,7 +3,7 @@
 //   bot-toolkit cards   <貼文資料夾…>                  依 post.json 重畫圖卡
 //   bot-toolkit polish  <貼文資料夾…>                  LLM 潤稿（需要 bot.config.mjs 的 persona）
 //   bot-toolkit video   [貼文資料夾…] [--tts=breezy]    合成短影音（不給資料夾＝今天的全部）
-//   bot-toolkit threads <貼文資料夾> [--images] [--confirm]   發 Threads（預設只預覽）
+//   bot-toolkit threads <貼文資料夾> [--images] [--template] [--confirm]   發 Threads（預設只預覽；--template 用模板原稿）
 //   bot-toolkit threads --text "內容" [--confirm]
 //   bot-toolkit whoami                                  驗證 Threads 權杖
 // 其他語言（例如 Python）也可以用 subprocess 呼叫這些指令，透過 post.json 交換資料。
@@ -74,7 +74,8 @@ switch (cmd) {
       const p = await readPost(dir);
       const site = p.brand.site.replace(/\/$/, '');
       const images = flag('--images') ? (await slideFiles(dir)).map((f) => `${site}/social/${path.basename(dir)}/${f}`) : [];
-      post = { text: finalText(p.captions.threads), images };
+      // --template：用模板原稿（潤稿版內容有疑慮時）
+      post = { text: flag('--template') ? p.captions.threads.template : finalText(p.captions.threads), images };
     } else {
       throw new Error('用法：bot-toolkit threads <貼文資料夾> [--images] [--confirm]  或  --text "內容"');
     }
