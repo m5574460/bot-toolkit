@@ -26,7 +26,7 @@ const hashtagCount = (s) => s.match(/#[^\s#]+/g)?.length ?? 0;
  * @param {string} output
  * @param {{ draft: string, maxLength?: number, banned?: string[] }} opts
  */
-export function validate(output, { draft, maxLength, banned = [] }) {
+export function validate(output, { draft, maxLength, banned = [], maxEmoji = 2 }) {
   const allowed = new Set(numbersIn(draft));
   const got = new Set(numbersIn(output));
   const extra = [...got].filter((n) => !allowed.has(n));
@@ -37,7 +37,8 @@ export function validate(output, { draft, maxLength, banned = [] }) {
   const hit = banned.filter((w) => output.includes(w));
   if (hit.length) return `出現禁用詞：${hit.join('、')}`;
   if (maxLength && [...output].length > maxLength) return `超過 ${maxLength} 字`;
-  if (emojiCount(output) > emojiCount(draft)) return '加了 emoji';
+  // emoji 少量就好（像真人），太多就像 AI：最多 maxEmoji 個（原稿本來就比較多則以原稿為準）
+  if (emojiCount(output) > Math.max(maxEmoji, emojiCount(draft))) return `emoji 太多（上限 ${maxEmoji} 個）`;
   if (hashtagCount(output) > hashtagCount(draft)) return '加了 hashtag';
   const ai = AI_PHRASES.filter((w) => output.includes(w));
   if (ai.length) return `AI 腔用語：${ai.join('、')}`;
@@ -63,7 +64,7 @@ const systemPrompt = ({ persona, banned }) => `你是${persona}。
 2. 不可以加入草稿沒有的事實、數據，或草稿沒提到的網站功能與內容（例如草稿沒說「扣稅」就不能寫）。
 3. ${banned.length ? `禁止出現這些字眼：${banned.join('、')}。` : '不可改變草稿的立場。'}
 4. 保留草稿最後的免責聲明與 hashtag（如果有）；草稿沒有 hashtag 就不要加。
-5. 使用台灣繁體中文與台灣用語。不要加任何 emoji（原稿沒有就一個都不要有）。
+5. 使用台灣繁體中文與台灣用語。emoji 可以用一點點（整篇最多 2 個，放在自然的位置），不要每行都放。
 6. 只輸出改寫後的貼文本身，不要任何說明。`;
 
 /**
@@ -71,7 +72,7 @@ const systemPrompt = ({ persona, banned }) => `你是${persona}。
  * @param {{ platform: 'threads'|'ig'|'narration', maxLength?: number, persona: string, banned?: string[] }} opts
  * @returns {Promise<{ text: string|null, reason?: string }>}
  */
-export async function polish(draft, { platform, maxLength, persona, banned = [] }) {
+export async function polish(draft, { platform, maxLength, persona, banned = [], maxEmoji = platform === 'narration' ? 0 : 2 }) {
   if (!client) return { text: null, reason: '未設定 MINIMAX_API_KEY' };
   for (let attempt = 1; attempt <= 2; attempt++) {
     try {
@@ -84,7 +85,7 @@ export async function polish(draft, { platform, maxLength, persona, banned = [] 
       // MiniMax 會回 thinking block，只取文字
       const text = res.content.filter((b) => b.type === 'text').map((b) => b.text).join('')
         .replace(/<think>[\s\S]*?<\/think>/g, '').trim();
-      const reason = validate(text, { draft, maxLength, banned });
+      const reason = validate(text, { draft, maxLength, banned, maxEmoji });
       if (!reason) return { text };
       if (attempt === 2) return { text: null, reason };
     } catch (err) {
