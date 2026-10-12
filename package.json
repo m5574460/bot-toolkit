@@ -13,7 +13,8 @@
     "./broll": "./src/broll/index.mjs",
     "./video": "./src/video/index.mjs",
     "./publish/threads": "./src/publish/threads.mjs",
-    "./data/twse": "./src/data/twse.mjs"
+    "./data/twse": "./src/data/twse.mjs",
+    "./publish/instagram": "./src/publish/instagram.mjs"
   },
   "bin": {
     "bot-toolkit": "./src/cli.mjs"
@@ -21,6 +22,7 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.131.0",
     "@resvg/resvg-js": "^2.6.2",
+    "jpeg-js": "^0.4.4",
     "msedge-tts": "^2.0.9",
     "satori": "^0.35.1"
   }

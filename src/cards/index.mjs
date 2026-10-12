@@ -9,6 +9,7 @@ import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import path from 'node:path';
 import satori from 'satori';
 import { Resvg } from '@resvg/resvg-js';
+import jpeg from 'jpeg-js';
 import { FONTS_DIR } from '../env.mjs';
 import { slideFile } from '../post/index.mjs';
 
@@ -46,8 +47,18 @@ export const h = (style, ...children) => ({
 
 /** 任意 satori 樹 → PNG Buffer */
 export async function renderPng(tree, width = W, height = H) {
+  return (await rasterize(tree, width, height)).asPng();
+}
+
+/** 任意 satori 樹 → JPEG Buffer（Instagram API 只接受 JPEG） */
+export async function renderJpeg(tree, width = W, height = H, quality = 90) {
+  const img = await rasterize(tree, width, height);
+  return Buffer.from(jpeg.encode({ data: img.pixels, width: img.width, height: img.height }, quality).data);
+}
+
+async function rasterize(tree, width, height) {
   const svg = await satori(tree, { width, height, fonts: await loadFonts() });
-  return new Resvg(svg, { fitTo: { mode: 'width', value: width } }).render().asPng();
+  return new Resvg(svg, { fitTo: { mode: 'width', value: width }, background: '#ffffff' }).render();
 }
 
 const host = (site) => new URL(site).host;
@@ -110,16 +121,20 @@ export const LAYOUTS = { cover, list, cta };
 
 export const colorsOf = (brand) => ({ ...DEFAULT_COLORS, ...brand?.colors });
 
-/** 把 post.slides 全部畫成 dir/01.png、02.png…，回傳檔名清單 */
-export async function renderSlides(post, dir) {
+/**
+ * 把 post.slides 全部畫成 dir/01.png、02.png…（format: 'jpeg' 則為 01.jpg…），回傳檔名清單
+ * @param {{ format?: 'png'|'jpeg' }} [opts]
+ */
+export async function renderSlides(post, dir, { format = 'png' } = {}) {
   await mkdir(dir, { recursive: true });
   const C = colorsOf(post.brand);
   const files = [];
   for (const [i, s] of post.slides.entries()) {
     const layout = LAYOUTS[s.type];
     if (!layout) throw new Error(`未知的圖卡版型：${s.type}`);
-    const file = slideFile(i);
-    await writeFile(path.join(dir, file), await renderPng(layout(s, post.brand, C)));
+    const tree = layout(s, post.brand, C);
+    const file = format === 'jpeg' ? slideFile(i).replace(/\.png$/, '.jpg') : slideFile(i);
+    await writeFile(path.join(dir, file), format === 'jpeg' ? await renderJpeg(tree) : await renderPng(tree));
     files.push(file);
   }
   return files;
