@@ -5,7 +5,7 @@ const ymd = (d) => d.toISOString().slice(0, 10).replaceAll('-', '');
 /** 民國日期 → ISO：「115年10月27日」或「1151005」 */
 export function rocToIso(s) {
   if (!s) return null;
-  let m = s.match(/^(\d{2,3})年(\d{1,2})月(\d{1,2})日$/);
+  let m = s.match(/^(\d{2,3})年(\d{1,2})月(\d{1,2})日$/) ?? s.match(/^(\d{2,3})\/(\d{1,2})\/(\d{1,2})$/); // 也接受 114/10/02
   if (!m) m = s.match(/^(\d{3})(\d{2})(\d{2})$/);
   if (!m) return null;
   const [, y, mo, d] = m;
@@ -65,34 +65,50 @@ export function frequencyOf(dividends) {
  */
 export async function fetchEtfs({ historyYears = 3 } = {}) {
   const [prices, divByCode] = await Promise.all([fetchDailyPrices(), fetchEtfDividends({ historyYears })]);
-  const today = new Date().toISOString().slice(0, 10);
-  const yearAgo = new Date(Date.now() - 365 * 864e5).toISOString().slice(0, 10);
   const etfs = [];
   for (const p of prices) {
-    const dividends = divByCode.get(p.Code);
-    const price = Number(p.ClosingPrice);
-    if (!dividends || !price) continue;
-    // 同一除息日去重，新到舊排序
-    const uniq = [...new Map(dividends.map((d) => [d.exDate, d])).values()]
-      .filter((d) => d.exDate)
-      .sort((a, b) => b.exDate.localeCompare(a.exDate));
-    const ttm = uniq.filter((d) => d.exDate >= yearAgo && d.exDate <= today && d.amount != null).reduce((s, d) => s + d.amount, 0);
-    const freq = frequencyOf(uniq);
-    etfs.push({
+    const etf = summarizeEtf({
       code: p.Code,
-      name: p.Name.trim(),
-      price,
+      name: p.Name,
+      price: Number(p.ClosingPrice),
       priceDate: rocToIso(p.Date),
       volume: Number(p.TradeVolume),
-      frequency: freq?.label ?? '不定期',
-      perYear: freq?.perYear ?? null,
-      ttmDividend: Math.round(ttm * 10000) / 10000,
-      ttmYield: ttm ? Math.round((ttm / price) * 10000) / 100 : 0,
-      lastDividend: uniq.find((d) => d.amount != null)?.amount ?? null,
-      upcoming: uniq.find((d) => d.exDate > today) ?? null,
-      dividends: uniq,
+      dividends: divByCode.get(p.Code),
+      market: 'TWSE',
     });
+    if (etf) etfs.push(etf);
   }
   etfs.sort((a, b) => b.volume - a.volume);
   return { updatedAt: new Date().toISOString(), etfs };
+}
+
+/**
+ * 把一檔 ETF 的價格與配息紀錄整理成統一格式（上市、上櫃共用，殖利率與頻率算法一致）
+ * @returns {object|null} 沒有配息紀錄或沒有成交價時回傳 null
+ */
+export function summarizeEtf({ code, name, price, priceDate, volume, dividends, market }) {
+  if (!dividends?.length || !price) return null;
+  const today = new Date().toISOString().slice(0, 10);
+  const yearAgo = new Date(Date.now() - 365 * 864e5).toISOString().slice(0, 10);
+  // 同一除息日去重，新到舊排序
+  const uniq = [...new Map(dividends.map((d) => [d.exDate, d])).values()]
+    .filter((d) => d.exDate)
+    .sort((a, b) => b.exDate.localeCompare(a.exDate));
+  const ttm = uniq.filter((d) => d.exDate >= yearAgo && d.exDate <= today && d.amount != null).reduce((s, d) => s + d.amount, 0);
+  const freq = frequencyOf(uniq);
+  return {
+    code,
+    name: name.trim(),
+    market,
+    price,
+    priceDate,
+    volume,
+    frequency: freq?.label ?? '不定期',
+    perYear: freq?.perYear ?? null,
+    ttmDividend: Math.round(ttm * 10000) / 10000,
+    ttmYield: ttm ? Math.round((ttm / price) * 10000) / 100 : 0,
+    lastDividend: uniq.find((d) => d.amount != null)?.amount ?? null,
+    upcoming: uniq.find((d) => d.exDate > today) ?? null,
+    dividends: uniq,
+  };
 }

@@ -15,7 +15,8 @@
     "./publish/threads": "./src/publish/threads.mjs",
     "./data/twse": "./src/data/twse.mjs",
     "./publish/instagram": "./src/publish/instagram.mjs",
-    "./media/ssh-host": "./src/media/ssh-host.mjs"
+    "./media/ssh-host": "./src/media/ssh-host.mjs",
+    "./data/tpex": "./src/data/tpex.mjs"
   },
   "bin": {
     "bot-toolkit": "./src/cli.mjs"
