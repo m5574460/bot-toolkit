@@ -63,6 +63,34 @@ export async function insights(postId) {
 }
 
 /**
+ * 貼文底下的所有留言（含留言的回覆），舊到新
+ * @returns {Promise<{ id: string, text?: string, username: string, timestamp: string, replied_to?: { id: string }, is_reply_owned_by_me: boolean }[]>}
+ */
+export async function conversation(postId) {
+  const out = [];
+  let after;
+  do {
+    const res = await call('GET', `${postId}/conversation`, {
+      fields: 'id,text,username,timestamp,replied_to,is_reply_owned_by_me',
+      reverse: 'false',
+      ...(after ? { after } : {}),
+    });
+    out.push(...res.data);
+    after = res.paging?.next ? res.paging.cursors?.after : undefined;
+  } while (after);
+  return out;
+}
+
+/** 回覆一則貼文或留言（需要 threads_manage_replies 權限） */
+export async function reply(replyToId, text) {
+  if ([...text].length > MAX_TEXT) throw new Error(`文字超過 ${MAX_TEXT} 字`);
+  const id = await container({ media_type: 'TEXT', text, reply_to_id: replyToId });
+  await waitReady(id);
+  const { id: postId } = await call('POST', `${user()}/threads_publish`, { creation_id: id });
+  return { id: postId };
+}
+
+/**
  * @param {{ text: string, images?: string[], video?: string }} post 圖片／影片為公開網址
  * @returns {Promise<{ id: string, permalink: string }>}
  */
