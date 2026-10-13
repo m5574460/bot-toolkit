@@ -65,17 +65,21 @@ export async function publish({ caption, images = [], video }) {
  * @returns {Promise<{ id: string, text: string, username: string, timestamp: string, replied_to?: { id: string }, is_reply_owned_by_me: boolean }[]>}
  */
 export async function conversation(mediaId) {
-  const me = String(process.env.IG_USER_ID ?? (await whoami()).user_id);
+  // 留言的 from.id 可能是 user_id 或 App 範圍的 id，兩個都比對，再加上帳號名稱
+  const me = await whoami();
+  const myIds = new Set([String(me.user_id), String(me.id), String(process.env.IG_USER_ID)]);
   const out = [];
-  const add = (c, parentId) =>
+  const add = (c, parentId) => {
+    const username = c.username ?? c.from?.username;
     out.push({
       id: c.id,
       text: c.text,
-      username: c.username ?? c.from?.username,
+      username,
       timestamp: c.timestamp,
       ...(parentId ? { replied_to: { id: parentId } } : {}),
-      is_reply_owned_by_me: String(c.from?.id) === me,
+      is_reply_owned_by_me: myIds.has(String(c.from?.id)) || username === me.username,
     });
+  };
   let after;
   do {
     const res = await call('GET', `${mediaId}/comments`, {
