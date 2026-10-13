@@ -72,12 +72,16 @@ function breezyRequest(text) {
   });
 }
 
-/** BreezyVoice 句中停頓偏長：超過 0.3 秒壓成 0.15 秒、去頭尾靜音，再整體加速 */
+/**
+ * BreezyVoice 句中停頓可能偏長：超過 BREEZY_PAUSE 秒的停頓壓成 BREEZY_PAUSE 秒（預設 0.15）、去頭尾靜音，
+ * 再整體調速 BREEZY_TEMPO（預設 1.10）。參考錄音換人時兩個都要重新試聽調整。
+ */
 async function breezyTts(text, outPath) {
   const wav = `${outPath}.raw.wav`;
   await writeFile(wav, await breezyRequest(text));
+  const pause = Number(env('BREEZY_PAUSE', '0.15'));
   await run('ffmpeg', ['-y', '-v', 'error', '-i', wav, '-af',
-    `silenceremove=start_periods=1:start_threshold=-45dB:stop_periods=-1:stop_duration=0.3:stop_threshold=-45dB:stop_silence=0.15,atempo=${env('BREEZY_TEMPO', '1.10')}`,
+    `silenceremove=start_periods=1:start_threshold=-45dB:stop_periods=-1:stop_duration=${Math.max(0.3, pause)}:stop_threshold=-45dB:stop_silence=${pause},atempo=${env('BREEZY_TEMPO', '1.10')}`,
     '-ar', '24000', '-ac', '1', '-b:a', '64k', outPath]);
   await rm(wav, { force: true });
   return readFile(outPath);

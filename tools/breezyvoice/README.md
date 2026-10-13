@@ -36,7 +36,9 @@ SPEAKER_PROMPT_AUDIO_PATH=./voices/<檔名>.wav
 SPEAKER_PROMPT_TEXT_TRANSCRIPTION=<錄音的逐字稿，一字不差>
 ```
 
-- 目前用 Edge YunJhe 念的 8 秒片段（逐字稿見 `yunjhe-short.txt`）
+- 目前用使用者本人的錄音（`my-voice.wav`，逐字稿 `my-voice.txt`）；之前用 Edge YunJhe 念的 8 秒片段（`yunjhe-short.*`）
+- 錄音音質要高（44.1kHz 以上、128kbps 以上或 wav）：模型會連壓縮雜訊一起模仿，16kHz／16kbps 的錄音生成後會「破破的」
+- 換參考錄音後重新試聽 `BREEZY_TEMPO`（整體速度）與 `BREEZY_PAUSE`（句中停頓上限秒數），設在機器人專案的 .env
 - 參考錄音越長，每句生成越慢；6～10 秒、安靜環境、語氣就是你想要的語氣
 - 換成真人錄音時，記得取得當事人同意（長期商用）
 
