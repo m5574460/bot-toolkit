@@ -59,6 +59,44 @@ export async function publish({ caption, images = [], video }) {
   return finish(await container({ media_type: 'CAROUSEL', children: children.join(','), caption }));
 }
 
+/**
+ * 貼文底下的留言（含留言的回覆），格式與 threads.conversation 一致，方便共用同一套回覆流程。
+ * 注意：App 在開發模式時只讀得到 App 測試人員的留言（其他人的留言 API 回傳空的，但 comments_count 會算）。
+ * @returns {Promise<{ id: string, text: string, username: string, timestamp: string, replied_to?: { id: string }, is_reply_owned_by_me: boolean }[]>}
+ */
+export async function conversation(mediaId) {
+  const me = String(process.env.IG_USER_ID ?? (await whoami()).user_id);
+  const out = [];
+  const add = (c, parentId) =>
+    out.push({
+      id: c.id,
+      text: c.text,
+      username: c.username ?? c.from?.username,
+      timestamp: c.timestamp,
+      ...(parentId ? { replied_to: { id: parentId } } : {}),
+      is_reply_owned_by_me: String(c.from?.id) === me,
+    });
+  let after;
+  do {
+    const res = await call('GET', `${mediaId}/comments`, {
+      fields: 'id,text,username,timestamp,from,replies{id,text,username,timestamp,from}',
+      ...(after ? { after } : {}),
+    });
+    for (const c of res.data) {
+      add(c);
+      for (const r of c.replies?.data ?? []) add(r, c.id);
+    }
+    after = res.paging?.next ? res.paging.cursors?.after : undefined;
+  } while (after);
+  return out;
+}
+
+/** 回覆一則留言（需要 instagram_business_manage_comments 權限） */
+export async function reply(commentId, text) {
+  const { id } = await call('POST', `${commentId}/replies`, { message: text });
+  return { id };
+}
+
 /** 貼文成效 */
 export async function insights(mediaId) {
   const { data } = await call('GET', `${mediaId}/insights`, { metric: 'views,reach,likes,comments,saved,shares' });
