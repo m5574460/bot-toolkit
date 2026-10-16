@@ -2,7 +2,7 @@
 //   breezy  — 本機 BreezyVoice（台灣口音，Docker＋GPU），生成後壓縮句中停頓並加速；見 tools/breezyvoice
 //   edge    — Edge TTS（快；BreezyVoice 不可用時自動退回）
 //   minimax — MiniMax 語音（計費）
-// 設定（.env）：TTS_PROVIDER、EDGE_VOICE、EDGE_RATE、BREEZY_TEMPO、BREEZY_DIR、BREEZY_URL、MINIMAX_TTS_MODEL、MINIMAX_VOICE
+// 設定（.env）：TTS_PROVIDER、TTS_FALLBACK（breezy 起不來時改用哪個，none＝直接失敗）、EDGE_VOICE、EDGE_RATE、BREEZY_TEMPO、BREEZY_PAUSE、BREEZY_DIR、BREEZY_URL、MINIMAX_TTS_MODEL、MINIMAX_VOICE
 import { writeFile, readFile, rm } from 'node:fs/promises';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
@@ -96,8 +96,31 @@ async function breezyReady() {
 }
 
 /** 確保 BreezyVoice 在跑；回傳 true 代表是這次啟動的（做完要關，它會吃掉約 5 GB 記憶體） */
+const dockerUp = () => run('docker', ['info', '--format', '{{.ServerVersion}}']).then(() => true, () => false);
+
+/** Windows：Docker Desktop 開著但引擎掛掉（docker info 失敗）時，重開 Docker Desktop */
+async function ensureDocker({ log, timeoutMs = 4 * 60e3 }) {
+  if (await dockerUp()) return;
+  if (process.platform !== 'win32') throw new Error('Docker 引擎沒有在跑');
+  log('  Docker 引擎沒有回應，重新啟動 Docker Desktop…');
+  for (const name of ['Docker Desktop.exe', 'com.docker.backend.exe', 'com.docker.build.exe', 'docker-agent.exe']) {
+    await run('taskkill', ['/F', '/IM', name]).catch(() => {});
+  }
+  const exe = path.join(process.env.ProgramFiles ?? 'C:\\Program Files', 'Docker', 'Docker', 'Docker Desktop.exe');
+  await new Promise((r) => setTimeout(r, 5000));
+  const { spawn } = await import('node:child_process');
+  spawn(exe, [], { detached: true, stdio: 'ignore' }).unref();
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    await new Promise((r) => setTimeout(r, 5000));
+    if (await dockerUp()) return;
+  }
+  throw new Error('Docker Desktop 重啟後仍然無法使用');
+}
+
 export async function startBreezy({ timeoutMs = 10 * 60e3, log = console.log } = {}) {
   if (await breezyReady()) return false;
+  await ensureDocker({ log });
   log('  啟動 BreezyVoice 容器（載入模型約 2～4 分鐘）…');
   await run('docker', [...COMPOSE, 'up', '-d'], { cwd: BREEZY_DIR() });
   const deadline = Date.now() + timeoutMs;
@@ -122,8 +145,11 @@ export async function prepareTts(provider = defaultProvider(), { log = console.l
     const started = await startBreezy({ log });
     return { provider, release: started ? stopBreezy : async () => {} };
   } catch (err) {
-    log(`  BreezyVoice 無法使用（${err.message}），改用 Edge TTS`);
-    return { provider: 'edge', release: async () => {} };
+    // 聲音要一致的機器人設 TTS_FALLBACK=none：寧可這次不做影片，也不要換成別人的聲音
+    const fallback = env('TTS_FALLBACK', 'edge');
+    if (fallback === 'none') throw new Error(`BreezyVoice 無法使用：${err.message}`);
+    log(`  BreezyVoice 無法使用（${err.message}），改用 ${fallback}`);
+    return { provider: fallback, release: async () => {} };
   }
 }
 
