@@ -29,6 +29,10 @@ async function waitReady(id) {
 
 const container = (params) => call('POST', `${user()}/threads`, params).then((r) => r.id);
 
+/** 自己最近的貼文（新到舊），用來確認發文是否其實成功 */
+export const recent = (limit = 10) =>
+  call('GET', `${user()}/threads`, { fields: 'id,text,permalink,timestamp', limit }).then((r) => r.data);
+
 /** 權杖對應的帳號（用來驗證權杖） */
 export const whoami = () => call('GET', 'me', { fields: 'id,username' });
 
