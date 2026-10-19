@@ -36,6 +36,10 @@ export const recent = (limit = 10) =>
 /** 權杖對應的帳號（用來驗證權杖） */
 export const whoami = () => call('GET', 'me', { fields: 'id,username' });
 
+/** 帳號目前的粉絲數 */
+export const followers = () =>
+  call('GET', `${user()}/threads_insights`, { metric: 'followers_count' }).then((r) => r.data?.[0]?.total_value?.value ?? 0);
+
 /**
  * 長效權杖續期：有效 60 天，產生後滿 24 小時才能續，續完重新計算 60 天。
  * 寫回機器人專案的 .env（THREADS_ACCESS_TOKEN、THREADS_TOKEN_EXPIRES_AT），回傳到期日。

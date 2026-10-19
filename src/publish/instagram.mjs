@@ -42,6 +42,9 @@ async function finish(creationId) {
 /** 權杖對應的帳號 */
 export const whoami = () => call('GET', 'me', { fields: 'user_id,username,account_type,media_count' });
 
+/** 帳號目前的粉絲數 */
+export const followers = () => call('GET', 'me', { fields: 'followers_count' }).then((r) => r.followers_count ?? 0);
+
 /**
  * 發文：images 1 張＝單圖，2～10 張＝輪播；或 video＝Reels（同時分享到動態）
  * @param {{ caption: string, images?: string[], video?: string }} post 素材為公開網址（圖片需 JPEG）
