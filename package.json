@@ -16,7 +16,8 @@
     "./data/twse": "./src/data/twse.mjs",
     "./publish/instagram": "./src/publish/instagram.mjs",
     "./media/ssh-host": "./src/media/ssh-host.mjs",
-    "./data/tpex": "./src/data/tpex.mjs"
+    "./data/tpex": "./src/data/tpex.mjs",
+    "./monitor/heartbeat": "./src/monitor/heartbeat.mjs"
   },
   "bin": {
     "bot-toolkit": "./src/cli.mjs"
