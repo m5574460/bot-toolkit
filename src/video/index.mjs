@@ -189,17 +189,21 @@ export async function makeVideo(dir, { provider, brollPools, bgmDir, log = conso
   });
   filters.push(`[c${cues.length}]format=yuv420p[vout]`);
   const nIdx = addInput('-i', 'video-work/narration.wav');
+  // 旁白：去低頻雜音、壓縮動態（句子之間音量一致）
+  filters.push(`[${nIdx}:a]highpass=f=80,acompressor=threshold=-18dB:ratio=3:attack=5:release=120:makeup=2[nar]`);
   const bgm = bgmDir && existsSync(bgmDir) ? (await readdir(bgmDir)).find((f) => /\.(mp3|m4a|wav)$/i.test(f)) : null;
   if (bgm) {
     const bgmIdx = addInput('-stream_loop', '-1', '-i', path.join(bgmDir, bgm));
     filters.push(`[${bgmIdx}:a]volume=0.08,afade=t=out:st=${(total - 1.5).toFixed(2)}:d=1.5[bg]`);
-    filters.push(`[${nIdx}:a][bg]amix=inputs=2:duration=first:normalize=0[aout]`);
+    filters.push(`[nar][bg]amix=inputs=2:duration=first:normalize=0[mix]`);
   }
+  // 整體響度調到 −14 LUFS（IG／Threads／YouTube 的播放標準），峰值限制 −1.5 dBTP，避免爆音或忽大忽小
+  filters.push(`[${bgm ? 'mix' : 'nar'}]loudnorm=I=-14:TP=-1.5:LRA=11,aresample=48000,alimiter=limit=0.79:level=false[aout]`);
 
   await run('ffmpeg', [
     '-y', '-v', 'error', ...inputs,
     '-filter_complex', filters.join(';'),
-    '-map', '[vout]', '-map', bgm ? '[aout]' : `${nIdx}:a`,
+    '-map', '[vout]', '-map', '[aout]',
     '-c:v', 'libx264', '-preset', 'medium', '-crf', '20', '-pix_fmt', 'yuv420p', '-r', String(FPS),
     '-c:a', 'aac', '-b:a', '160k', '-t', total.toFixed(3), '-movflags', '+faststart',
     'video.mp4',
