@@ -48,15 +48,20 @@ export async function fetchEtfDividends({ historyYears = 3 } = {}) {
   return byCode;
 }
 
-/** 以近 12 個月（已公布金額）的配息次數判斷頻率 */
+/**
+ * 配息頻率：看最近幾次除息日（含已公告、還沒除息的）之間的間隔中位數。
+ * 不能只數「近 12 個月配了幾次」：上市未滿一年的月配 ETF 只配過 3 次，會被誤判成季配。
+ * @param {{ exDate: string }[]} dividends 新到舊
+ */
 export function frequencyOf(dividends) {
-  const cutoff = new Date(Date.now() - 365 * 864e5).toISOString().slice(0, 10);
-  const n = dividends.filter((d) => d.exDate >= cutoff && d.amount != null).length;
-  if (n >= 10) return { label: '月配', perYear: 12 };
-  if (n >= 3) return { label: '季配', perYear: 4 };
-  if (n === 2) return { label: '半年配', perYear: 2 };
-  if (n === 1) return { label: '年配', perYear: 1 };
-  return null;
+  const dates = [...new Set(dividends.map((d) => d.exDate).filter(Boolean))].sort().reverse().slice(0, 7);
+  if (dates.length < 2) return null;
+  const gaps = dates.slice(1).map((d, i) => (Date.parse(dates[i]) - Date.parse(d)) / 864e5).sort((a, b) => a - b);
+  const median = gaps[gaps.length >> 1];
+  if (median <= 45) return { label: '月配', perYear: 12 };
+  if (median <= 135) return { label: '季配', perYear: 4 };
+  if (median <= 270) return { label: '半年配', perYear: 2 };
+  return { label: '年配', perYear: 1 };
 }
 
 /**
@@ -94,8 +99,13 @@ export function summarizeEtf({ code, name, price, priceDate, volume, dividends, 
   const uniq = [...new Map(dividends.map((d) => [d.exDate, d])).values()]
     .filter((d) => d.exDate)
     .sort((a, b) => b.exDate.localeCompare(a.exDate));
-  const ttm = uniq.filter((d) => d.exDate >= yearAgo && d.exDate <= today && d.amount != null).reduce((s, d) => s + d.amount, 0);
+  const paid = uniq.filter((d) => d.exDate >= yearAgo && d.exDate <= today && d.amount != null);
+  const paidSum = paid.reduce((s, d) => s + d.amount, 0);
   const freq = frequencyOf(uniq);
+  // 上市未滿一年（最早一次除息在一年內）：近 12 月配息次數不足，改用近期平均每次配息 × 一年次數年化估算
+  const young = uniq.at(-1).exDate > yearAgo;
+  const estimated = Boolean(young && freq && paid.length && paid.length < freq.perYear);
+  const ttm = estimated ? (paidSum / paid.length) * freq.perYear : paidSum;
   return {
     code,
     name: name.trim(),
@@ -103,10 +113,15 @@ export function summarizeEtf({ code, name, price, priceDate, volume, dividends, 
     price,
     priceDate,
     volume,
-    frequency: freq?.label ?? '不定期',
+    // 只有一次除息紀錄：剛上市的標「資料不足」，老 ETF 標「不定期」
+    frequency: freq?.label ?? (young ? '資料不足' : '不定期'),
     perYear: freq?.perYear ?? null,
     ttmDividend: Math.round(ttm * 10000) / 10000,
     ttmYield: ttm ? Math.round((ttm / price) * 10000) / 100 : 0,
+    // estimated＝上市未滿一年、ttmDividend 是年化估算；paidCount／paidSum 是近 12 月實際配息
+    estimated,
+    paidCount: paid.length,
+    paidSum: Math.round(paidSum * 10000) / 10000,
     lastDividend: uniq.find((d) => d.amount != null)?.amount ?? null,
     upcoming: uniq.find((d) => d.exDate > today) ?? null,
     dividends: uniq,
