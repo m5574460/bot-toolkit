@@ -99,9 +99,15 @@ export function summarizeEtf({ code, name, price, priceDate, volume, dividends, 
   const uniq = [...new Map(dividends.map((d) => [d.exDate, d])).values()]
     .filter((d) => d.exDate)
     .sort((a, b) => b.exDate.localeCompare(a.exDate));
-  const paid = uniq.filter((d) => d.exDate >= yearAgo && d.exDate <= today && d.amount != null);
-  const paidSum = paid.reduce((s, d) => s + d.amount, 0);
   const freq = frequencyOf(uniq);
+  // 近 12 月已發放的配息：除息日每年會前後移幾天，所以
+  //  - 範圍放寬到 400 天（年配 ETF 今年還沒公告時，不會因為去年那次剛好超過 365 天而變成 0）
+  //  - 最多只取「一年應有次數」的最近幾次（0056 去年 10/23、今年 10/22 都在範圍內時，不會算成 5 次季配）
+  const windowStart = new Date(Date.now() - (freq ? 400 : 365) * 864e5).toISOString().slice(0, 10);
+  const paid = uniq
+    .filter((d) => d.exDate >= windowStart && d.exDate <= today && d.amount != null)
+    .slice(0, freq?.perYear ?? Infinity);
+  const paidSum = paid.reduce((s, d) => s + d.amount, 0);
   // 上市未滿一年（最早一次除息在一年內）：近 12 月配息次數不足，改用近期平均每次配息 × 一年次數年化估算
   const young = uniq.at(-1).exDate > yearAgo;
   const estimated = Boolean(young && freq && paid.length && paid.length < freq.perYear);
