@@ -26,6 +26,18 @@ docker compose build                   # 約 12 GB，第一次很久
 | single_inference.py | `torch.set_num_threads(1)` 改成讀 `TORCH_THREADS` |
 | cosyvoice/cli/frontend.py | onnxruntime 執行緒讀 `ORT_THREADS`；參考錄音特徵只算一次（原本每句重算，佔一半時間） |
 | api.py | 參考錄音逐字稿的注音轉換只做一次 |
+| compose.gpu.yaml | 掛載本機 `./G2PWModel`（見下方） |
+
+## g2pW 注音模型（必須放本機）
+
+BreezyVoice 啟動時用 g2pW 做注音轉換；套件預設每次在容器裡下載 `storage.googleapis.com/esun-ai/g2pW/G2PWModel-v2-onnx.zip`，
+**這個網址 2026-10 已失效（NoSuchBucket）**，啟動會因 `BadZipFile` 失敗。做法：
+
+1. 從作者官方 HuggingFace 下載一次：https://huggingface.co/YC-Chen/g2pW/resolve/main/G2PWModel-v2-onnx.zip（約 589 MB）
+2. 解壓到 BreezyVoice 資料夾，得到 `G2PWModel/`（含 `g2pw.onnx`、`config.py`、`version`…）
+3. `compose.gpu.yaml` 的 volumes 加 `- ./G2PWModel:/breezyvoice/G2PWModel:ro`
+
+不要用其他人上傳的副本：`config.py` 會被當成 Python 執行。
 
 ## 換參考錄音（聲音）
 
