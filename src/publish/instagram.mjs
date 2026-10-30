@@ -34,7 +34,17 @@ const container = (params) => call('POST', `${user()}/media`, params).then((r) =
 
 async function finish(creationId) {
   await waitReady(creationId);
-  const { id } = await call('POST', `${user()}/media_publish`, { creation_id: creationId });
+  // 狀態已經是 FINISHED，media_publish 偶爾還是回「media is not ready」→ 等一下再試（沒發布成功，不會重複發）
+  let id;
+  for (let i = 0; ; i++) {
+    try {
+      ({ id } = await call('POST', `${user()}/media_publish`, { creation_id: creationId }));
+      break;
+    } catch (err) {
+      if (i >= 5 || !/not ready/i.test(err.message)) throw err;
+      await new Promise((r) => setTimeout(r, 20_000));
+    }
+  }
   const { permalink } = await call('GET', id, { fields: 'permalink' });
   return { id, permalink };
 }
