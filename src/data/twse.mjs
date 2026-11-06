@@ -1,5 +1,7 @@
 // 臺灣證券交易所公開資料：上市 ETF 收盤價＋收益分配（配息）紀錄。台股相關機器人共用。
 //   const { updatedAt, etfs } = await fetchEtfs();
+import { applySplits, splitsFor } from './splits.mjs';
+
 const ymd = (d) => d.toISOString().slice(0, 10).replaceAll('-', '');
 
 /** 民國日期 → ISO：「115年10月27日」或「1151005」 */
@@ -91,14 +93,15 @@ export async function fetchEtfs({ historyYears = 3 } = {}) {
  * 把一檔 ETF 的價格與配息紀錄整理成統一格式（上市、上櫃共用，殖利率與頻率算法一致）
  * @returns {object|null} 沒有配息紀錄或沒有成交價時回傳 null
  */
-export function summarizeEtf({ code, name, price, priceDate, volume, dividends, market }) {
+export function summarizeEtf({ code, name, price, priceDate, volume, dividends, market, splits = splitsFor(code) }) {
   if (!dividends?.length || !price) return null;
   const today = new Date().toISOString().slice(0, 10);
   const yearAgo = new Date(Date.now() - 365 * 864e5).toISOString().slice(0, 10);
-  // 同一除息日去重，新到舊排序
-  const uniq = [...new Map(dividends.map((d) => [d.exDate, d])).values()]
+  // 同一除息日去重，新到舊排序；分割前的配息依比率調整（data/splits）
+  const deduped = [...new Map(dividends.map((d) => [d.exDate, d])).values()]
     .filter((d) => d.exDate)
     .sort((a, b) => b.exDate.localeCompare(a.exDate));
+  const { dividends: uniq, applied } = applySplits(deduped, splits);
   const freq = frequencyOf(uniq);
   // 近 12 月已發放的配息：除息日每年會前後移幾天，所以
   //  - 範圍放寬到 400 天（年配 ETF 今年還沒公告時，不會因為去年那次剛好超過 365 天而變成 0）
@@ -130,6 +133,8 @@ export function summarizeEtf({ code, name, price, priceDate, volume, dividends, 
     paidSum: Math.round(paidSum * 10000) / 10000,
     lastDividend: uniq.find((d) => d.amount != null)?.amount ?? null,
     upcoming: uniq.find((d) => d.exDate > today) ?? null,
+    // 有調整到配息時才有：[{ date: 恢復買賣日期, ratio }]，頁面用來寫說明；調整過的配息另有 rawAmount（原公告金額）
+    ...(applied.length && { splits: applied }),
     dividends: uniq,
   };
 }

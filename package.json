@@ -18,6 +18,7 @@
     "./media/ssh-host": "./src/media/ssh-host.mjs",
     "./data/tpex": "./src/data/tpex.mjs",
     "./data/sitca": "./src/data/sitca.mjs",
+    "./data/splits": "./src/data/splits.mjs",
     "./monitor/heartbeat": "./src/monitor/heartbeat.mjs"
   },
   "bin": {
