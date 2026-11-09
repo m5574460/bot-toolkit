@@ -40,6 +40,39 @@ export const whoami = () => call('GET', 'me', { fields: 'id,username' });
 export const followers = () =>
   call('GET', `${user()}/threads_insights`, { metric: 'followers_count' }).then((r) => r.data?.[0]?.total_value?.value ?? 0);
 
+const toUnix = (t) => (typeof t === 'number' ? t : Math.floor(new Date(t).getTime() / 1000));
+
+/**
+ * 解析帳號層級成效的回應（純函式，方便測試）
+ * - clicks：期間內每個網址的點擊合計 → [{ url, value }]（欄位是 link_total_values，不是 values）
+ * - views 等時間序列：每天一筆 → [{ end, value }]（end 是 API 的 end_time）
+ * - followers_count 等總數：→ [{ value }]
+ * 找不到預期欄位就丟錯：API 對不認得的欄位會靜默忽略、回 200，不能默默當 0
+ */
+export function parseAccountInsights(metric, json) {
+  const m = json?.data?.find((d) => d.name === metric);
+  if (!m) throw new Error(`Threads API：回應裡沒有 ${metric}`);
+  if (metric === 'clicks') {
+    if (!Array.isArray(m.link_total_values)) throw new Error('Threads API：clicks 沒有 link_total_values');
+    return m.link_total_values.map((v) => ({ url: v.link_url, value: v.value ?? 0 }));
+  }
+  if (Array.isArray(m.values)) return m.values.map((v) => ({ end: v.end_time, value: v.value ?? 0 }));
+  if (m.total_value) return [{ value: m.total_value.value ?? 0 }];
+  throw new Error(`Threads API：${metric} 沒有 values／total_value`);
+}
+
+/**
+ * 帳號層級成效（/{user-id}/threads_insights），一次一個指標
+ * @param {{ metric: 'views'|'clicks'|'likes'|'replies'|'reposts'|'quotes'|'followers_count', since?: Date|string|number, until?: Date|string|number }} opts
+ *   since／until：Date、ISO 字串或 Unix 秒
+ */
+export async function accountInsights({ metric, since, until }) {
+  const params = { metric };
+  if (since != null) params.since = toUnix(since);
+  if (until != null) params.until = toUnix(until);
+  return parseAccountInsights(metric, await call('GET', `${user()}/threads_insights`, params));
+}
+
 /**
  * 長效權杖續期：有效 60 天，產生後滿 24 小時才能續，續完重新計算 60 天。
  * 寫回機器人專案的 .env（THREADS_ACCESS_TOKEN、THREADS_TOKEN_EXPIRES_AT），回傳到期日。
