@@ -97,9 +97,16 @@ export async function refreshToken(envFile = '.env') {
   return expiresAt;
 }
 
-/** 讀取自己某篇貼文的成效（views、likes、replies、reposts、quotes） */
+const POST_METRICS = ['views', 'likes', 'replies', 'reposts', 'quotes'];
+
+/**
+ * 讀取自己某篇貼文的成效（views、likes、replies、reposts、quotes、shares）
+ * 只回傳 API 真的有給的欄位：沒有 `shares` 這個 key 代表讀不到，不是 0（API 對不認得的欄位會靜默忽略）
+ * 帶 shares 的請求被拒絕時，退回原本五個指標再要一次，不讓整篇成效跟著讀不到
+ */
 export async function insights(postId) {
-  const { data } = await call('GET', `${postId}/insights`, { metric: 'views,likes,replies,reposts,quotes' });
+  const get = (metrics) => call('GET', `${postId}/insights`, { metric: metrics.join(',') });
+  const { data } = await get([...POST_METRICS, 'shares']).catch(() => get(POST_METRICS));
   return Object.fromEntries(data.map((m) => [m.name, m.values?.[0]?.value ?? m.total_value?.value ?? 0]));
 }
 
