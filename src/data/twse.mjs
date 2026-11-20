@@ -90,6 +90,22 @@ export async function fetchEtfs({ historyYears = 3 } = {}) {
 }
 
 /**
+ * 同一除息日只留一列：原則上留最後一列，但最後一列沒有金額、前面有金額時留有金額的那列。
+ * 來源可能把「先公告沒金額」和「後補金額」存成兩列（上櫃的預告表也會跟歷史表重複），
+ * 不能讓空的那列蓋掉已經有的金額。
+ * @param {{ exDate: string, amount: number|null }[]} dividends
+ */
+export function dedupeByExDate(dividends) {
+  const byDate = new Map();
+  for (const d of dividends) {
+    const prev = byDate.get(d.exDate);
+    if (prev && prev.amount != null && d.amount == null) continue;
+    byDate.set(d.exDate, d);
+  }
+  return [...byDate.values()];
+}
+
+/**
  * 把一檔 ETF 的價格與配息紀錄整理成統一格式（上市、上櫃共用，殖利率與頻率算法一致）
  * @returns {object|null} 沒有配息紀錄或沒有成交價時回傳 null
  */
@@ -98,7 +114,7 @@ export function summarizeEtf({ code, name, price, priceDate, volume, dividends, 
   const today = new Date().toISOString().slice(0, 10);
   const yearAgo = new Date(Date.now() - 365 * 864e5).toISOString().slice(0, 10);
   // 同一除息日去重，新到舊排序；分割前的配息依比率調整（data/splits）
-  const deduped = [...new Map(dividends.map((d) => [d.exDate, d])).values()]
+  const deduped = dedupeByExDate(dividends)
     .filter((d) => d.exDate)
     .sort((a, b) => b.exDate.localeCompare(a.exDate));
   const { dividends: uniq, applied } = applySplits(deduped, splits);
